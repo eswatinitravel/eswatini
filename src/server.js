@@ -67,7 +67,7 @@ export function createApp(db = openDb()) {
       const ship = bookShipment({ orderId: id, city, courier });
       for (const it of items) db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(it.qty, it.id);
       db.prepare('UPDATE orders SET status=?, tracking=?, courier=? WHERE id=?').run('confirmed', ship.tracking, ship.courier, id);
-      sendMail(db, email, `Order #${id} confirmed`, `Total Rs ${total}. Payment ref ${pay.ref}. Tracking ${ship.tracking} (${ship.courier}).`);
+      await sendMail(db, email, `Order #${id} confirmed`, `Total Rs ${total}. Payment ref ${pay.ref}. Tracking ${ship.tracking} (${ship.courier}).`);
       res.status(201).json({ id, total, payment: pay, shipment: ship });
     } catch (e) { res.status(500).json({ error: e.message }); }
   });
