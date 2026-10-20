@@ -54,6 +54,30 @@ export function createApp(db = openDb()) {
     res.status(201).json(p);
   });
 
+  // Payment config: merchant IDs and mode (manual = customer pays your wallet, admin confirms).
+  const cfg = m => db.prepare('SELECT * FROM payment_config WHERE method=?').get(m);
+  app.get('/api/payments/methods', (req, res) => res.json([
+    { method: 'cod', mode: 'cod' },
+    ...db.prepare('SELECT * FROM payment_config').all().map(c => ({ method: c.method, mode: c.mode, account: c.merchant_id, account_title: c.account_title }))
+  ]));
+  app.put('/api/payments/config/:method', requireAdmin, (req, res) => {
+    if (!cfg(req.params.method)) return res.status(404).json({ error: 'Unknown method' });
+    const { merchant_id, account_title, mode } = req.body;
+    if (mode !== undefined && !['manual', 'api'].includes(mode)) return res.status(400).json({ error: 'mode must be manual or api' });
+    const c = cfg(req.params.method);
+    db.prepare('UPDATE payment_config SET merchant_id=?, account_title=?, mode=? WHERE method=?').run(merchant_id ?? c.merchant_id, account_title ?? c.account_title, mode ?? c.mode, req.params.method);
+    res.json(cfg(req.params.method));
+  });
+  app.post('/api/orders/:id/confirm-payment', requireAdmin, async (req, res) => {
+    const o = db.prepare('SELECT * FROM orders WHERE id=?').get(Number(req.params.id));
+    if (!o) return res.status(404).json({ error: 'Order not found' });
+    if (o.status !== 'awaiting_payment') return res.status(409).json({ error: 'Order is not awaiting payment' });
+    const ship = bookShipment({ orderId: o.id, city: o.city, courier: o.courier || undefined });
+    db.prepare('UPDATE orders SET status=?, tracking=?, courier=? WHERE id=?').run('confirmed', ship.tracking, ship.courier, o.id);
+    await sendMail(db, o.email, `Payment received for order #${o.id}`, `Thank you. Tracking ${ship.tracking} (${ship.courier}).${req.body.txn_ref ? ` Transaction ${req.body.txn_ref}.` : ''}`);
+    res.json({ id: o.id, status: 'confirmed', shipment: ship });
+  });
+
   // Wishlist
   app.get('/api/wishlist/:client', (req, res) => res.json(db.prepare('SELECT p.* FROM wishlist w JOIN products p ON p.id=w.product_id WHERE w.client=?').all(req.params.client)));
   app.post('/api/wishlist/:client/:pid', (req, res) => { db.prepare('INSERT OR IGNORE INTO wishlist VALUES(?,?)').run(req.params.client, Number(req.params.pid)); res.sendStatus(204); });
@@ -72,11 +96,19 @@ export function createApp(db = openDb()) {
         if (!p || p.stock < it.qty) return res.status(400).json({ error: `Insufficient stock for item ${it.id}` });
         total += p.price * it.qty;
       }
-      const o = db.prepare('INSERT INTO orders(email,address,city,total,method,status) VALUES(?,?,?,?,?,?)').run(email, address, city, total, method, 'pending');
+      const conf = cfg(method);
+      const manual = conf && conf.mode === 'manual';
+      const o = db.prepare('INSERT INTO orders(email,address,city,total,method,status,courier) VALUES(?,?,?,?,?,?,?)').run(email, address, city, total, method, 'pending', courier || null);
       const id = Number(o.lastInsertRowid);
-      const pay = await gw.charge({ orderId: id, amount: total, phone });
-      const ship = bookShipment({ orderId: id, city, courier });
       for (const it of items) db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(it.qty, it.id);
+      if (manual) {
+        db.prepare('UPDATE orders SET status=? WHERE id=?').run('awaiting_payment', id);
+        const instructions = `Please send Rs ${total} to ${method} account ${conf.merchant_id || '(not set)'}${conf.account_title ? ` (${conf.account_title})` : ''} and quote order #${id}. We ship once payment is confirmed.`;
+        await sendMail(db, email, `Order #${id} awaiting payment`, instructions);
+        return res.status(201).json({ id, total, status: 'awaiting_payment', instructions });
+      }
+      const pay = await gw.charge({ orderId: id, amount: total, phone, merchantId: conf?.merchant_id });
+      const ship = bookShipment({ orderId: id, city, courier });
       db.prepare('UPDATE orders SET status=?, tracking=?, courier=? WHERE id=?').run('confirmed', ship.tracking, ship.courier, id);
       await sendMail(db, email, `Order #${id} confirmed`, `Total Rs ${total}. Payment ref ${pay.ref}. Tracking ${ship.tracking} (${ship.courier}).`);
       res.status(201).json({ id, total, payment: pay, shipment: ship });

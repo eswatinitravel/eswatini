@@ -28,6 +28,26 @@ test('catalog, wishlist, scan, checkout', async () => {
     assert.equal(o.s, 201);
     assert.equal(o.b.total, 9000);
     assert.equal(db.prepare('SELECT COUNT(*) c FROM emails').get().c, 1);
+    // Payment config: manual mode (default) holds the order until an admin confirms payment.
+    const put = (u, b, auth = true) => j(u, { method: 'PUT', headers: { 'content-type': 'application/json', ...(auth && { authorization: 'Bearer secret' }) }, body: JSON.stringify(b) });
+    assert.equal((await put('/api/payments/config/jazzcash', { merchant_id: '0300' }, false)).s, 401);
+    assert.equal((await put('/api/payments/config/jazzcash', { mode: 'bad' })).s, 400);
+    assert.equal((await put('/api/payments/config/nope', {})).s, 404);
+    await put('/api/payments/config/jazzcash', { merchant_id: '03001234567', account_title: 'My Design' });
+    const methods = (await j('/api/payments/methods')).b;
+    assert.equal(methods.find(m => m.method === 'jazzcash').account, '03001234567');
+    const mo = await post('/api/orders', { email: 'm@b.pk', address: 'x', city: 'Karachi', method: 'jazzcash', items: [{ id: 2, qty: 1 }] });
+    assert.equal(mo.b.status, 'awaiting_payment');
+    assert.match(mo.b.instructions, /03001234567/);
+    assert.equal((await post(`/api/orders/${mo.b.id}/confirm-payment`, {}, false)).s, 401);
+    const cp = await post(`/api/orders/${mo.b.id}/confirm-payment`, { txn_ref: 'T1' });
+    assert.equal(cp.b.status, 'confirmed');
+    assert.equal((await post(`/api/orders/${mo.b.id}/confirm-payment`, {})).s, 409);
+    // api mode charges immediately (sandbox)
+    await put('/api/payments/config/jazzcash', { mode: 'api' });
+    const ao = await post('/api/orders', { email: 'm@b.pk', address: 'x', city: 'Karachi', method: 'jazzcash', items: [{ id: 2, qty: 1 }] });
+    assert.equal(ao.b.shipment.courier, 'tcs');
+    assert.match(ao.b.payment.ref, /^JC-/);
     assert.equal((await post('/api/orders', { email: 'a', items: [{ id: 1, qty: 999 }] })).s, 400);
     assert.equal((await post('/api/products', { name: 'Test Lamp', price: 1, barcode: 'zz' })).b.category, 'lighting');
     assert.equal(db.prepare('SELECT COUNT(*) c FROM social_posts').get().c, 2);
