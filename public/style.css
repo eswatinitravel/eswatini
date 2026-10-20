@@ -1,0 +1,23 @@
+:root{--bg:#fff;--fg:#222;--accent:#c0392b;--card:#f4f4f4}
+/* Light aura themes */
+[data-theme=light-rose]{--bg:#fff5f7;--fg:#3a2030;--accent:#e0457b;--card:#ffe4ec}
+[data-theme=light-mint]{--bg:#f2fff8;--fg:#173a2c;--accent:#1fa971;--card:#dcf7ea}
+[data-theme=light-sky]{--bg:#f2f9ff;--fg:#17304a;--accent:#2b8cd9;--card:#dcedfb}
+[data-theme=light-sand]{--bg:#fffaf0;--fg:#44361f;--accent:#c98a1b;--card:#f8ecd2}
+[data-theme=light-lilac]{--bg:#faf5ff;--fg:#2f2044;--accent:#8e4ad8;--card:#eddcfb}
+/* Dark aura themes */
+[data-theme=dark-midnight]{--bg:#0b1020;--fg:#e6ebff;--accent:#5b7cff;--card:#161d36}
+[data-theme=dark-ember]{--bg:#1a0e0b;--fg:#ffe9e2;--accent:#ff6a3d;--card:#2c1914}
+[data-theme=dark-forest]{--bg:#09160f;--fg:#e1fbea;--accent:#2fd47a;--card:#12281c}
+[data-theme=dark-violet]{--bg:#130b1f;--fg:#f0e6ff;--accent:#a35bff;--card:#221436}
+[data-theme=dark-ocean]{--bg:#06161c;--fg:#dcf6ff;--accent:#27c4e8;--card:#0e2a35}
+body{margin:0;font-family:system-ui,sans-serif;background:var(--bg);color:var(--fg);transition:.3s}
+header{display:flex;justify-content:space-between;padding:1rem 2rem}
+#banner{background:var(--accent);color:#fff;text-align:center;padding:.5rem}
+#hero{display:flex;justify-content:center;padding:1rem}
+main{padding:0 2rem 2rem}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1rem}
+@media(max-width:800px){#grid{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--card);padding:1rem;border-radius:12px;box-shadow:0 0 18px color-mix(in srgb,var(--accent) 35%,transparent)}
+button{background:var(--accent);color:#fff;border:0;border-radius:6px;padding:.4rem .7rem;cursor:pointer;margin:.2rem}
+input,select{padding:.4rem;margin:.2rem}
