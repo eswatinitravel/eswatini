@@ -11,3 +11,5 @@ Open `/admin.html` for the camera barcode scanner (needs HTTPS or localhost and 
 Admin endpoints (`/api/products`, `/api/inventory/*`) require `Authorization: Bearer $ADMIN_TOKEN`; set `ADMIN_TOKEN` before starting.
 
 Email: set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` (and `SMTP_SECURE=true` for port 465) to send order confirmations. Without `SMTP_HOST`, emails are only stored in the `emails` table.
+
+Themes: `GET /api/themes` lists the 10 themes and the store default; `PUT /api/themes/default` (admin) with `{"id":"light-sky"}` changes the default. A visitor's own choice is kept in their browser and overrides it.

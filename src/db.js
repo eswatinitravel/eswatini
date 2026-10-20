@@ -8,6 +8,7 @@ export function openDb(file = process.env.DB_FILE || 'mydesign.db') {
     CREATE TABLE IF NOT EXISTS wishlist(client TEXT, product_id INTEGER, PRIMARY KEY(client, product_id));
     CREATE TABLE IF NOT EXISTS emails(id INTEGER PRIMARY KEY, to_addr TEXT, subject TEXT, body TEXT);
     CREATE TABLE IF NOT EXISTS banners(id INTEGER PRIMARY KEY, text TEXT, active INTEGER DEFAULT 1);
+    CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS social_posts(id INTEGER PRIMARY KEY, platform TEXT, text TEXT);
   `);
   if (db.prepare('SELECT COUNT(*) c FROM products').get().c === 0) {

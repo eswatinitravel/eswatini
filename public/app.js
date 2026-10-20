@@ -1,13 +1,14 @@
-const themes = ['light-rose','light-mint','light-sky','light-sand','light-lilac','dark-midnight','dark-ember','dark-forest','dark-violet','dark-ocean'];
 const $ = id => document.getElementById(id);
 const client = localStorage.client ||= Math.random().toString(36).slice(2);
 let products = [], cart = {};
 
 const sel = $('theme');
-sel.innerHTML = themes.map(t => `<option>${t}</option>`).join('');
-const setTheme = t => { document.documentElement.dataset.theme = t; localStorage.theme = t; sel.value = t; };
-sel.onchange = () => setTheme(sel.value);
-setTheme(localStorage.theme || 'dark-midnight');
+const setTheme = t => { document.documentElement.dataset.theme = t; sel.value = t; };
+sel.onchange = () => { localStorage.theme = sel.value; setTheme(sel.value); };
+fetch('/api/themes').then(r => r.json()).then(({ default: def, themes }) => {
+  sel.innerHTML = themes.map(t => `<option>${t.id}</option>`).join('');
+  setTheme(themes.some(t => t.id === localStorage.theme) ? localStorage.theme : def);
+});
 
 // 3D rotating hero: a wireframe cube projected on a 2D canvas (no external lib needed).
 const cv = $('hero3d'), ctx = cv.getContext('2d');

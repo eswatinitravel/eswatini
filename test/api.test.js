@@ -18,6 +18,12 @@ test('catalog, wishlist, scan, checkout', async () => {
     assert.equal((await post('/api/inventory/scan', { barcode: prods[0].barcode, qty: 5 })).b.stock, 15);
     assert.equal((await post('/api/inventory/recognize', { hint: 'blue vase' })).b.category, 'decor');
     assert.equal((await post('/api/inventory/scan', { barcode: 'x' }, false)).s, 401);
+    const th = (await j('/api/themes')).b;
+    assert.equal(th.themes.length, 10);
+    assert.equal(th.default, 'dark-midnight');
+    assert.equal((await j('/api/themes/default', { method: 'PUT', headers: { 'content-type': 'application/json', authorization: 'Bearer secret' }, body: JSON.stringify({ id: 'light-sky' }) })).s, 200);
+    assert.equal((await j('/api/themes')).b.default, 'light-sky');
+    assert.equal((await j('/api/themes/default', { method: 'PUT', headers: { 'content-type': 'application/json', authorization: 'Bearer secret' }, body: JSON.stringify({ id: 'nope' }) })).s, 400);
     const o = await post('/api/orders', { email: 'a@b.pk', address: 'x', city: 'Lahore', method: 'easypaisa', courier: 'leopards', items: [{ id: 1, qty: 2 }] });
     assert.equal(o.s, 201);
     assert.equal(o.b.total, 9000);

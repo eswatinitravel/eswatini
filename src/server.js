@@ -6,6 +6,7 @@ import { bookShipment, supportedCouriers } from './services/courier.js';
 import { sendMail } from './services/mailer.js';
 import { recognize } from './services/vision.js';
 import { autoPost } from './services/social.js';
+import { themes, DEFAULT_THEME } from './themes.js';
 
 export function requireAdmin(req, res, next) {
   const token = process.env.ADMIN_TOKEN;
@@ -22,6 +23,16 @@ export function createApp(db = openDb()) {
   app.get('/api/products', (req, res) => res.json(db.prepare('SELECT * FROM products').all()));
   app.get('/api/banners', (req, res) => res.json(db.prepare('SELECT * FROM banners WHERE active=1').all()));
   app.get('/api/couriers', (req, res) => res.json(supportedCouriers));
+
+  // Themes: list is fixed, the store default is stored in settings.
+  const defaultTheme = () => db.prepare("SELECT value FROM settings WHERE key='theme'").get()?.value || DEFAULT_THEME;
+  app.get('/api/themes', (req, res) => res.json({ default: defaultTheme(), themes }));
+  app.put('/api/themes/default', requireAdmin, (req, res) => {
+    const id = req.body.id;
+    if (!themes.some(t => t.id === id)) return res.status(400).json({ error: 'Unknown theme' });
+    db.prepare("INSERT INTO settings(key,value) VALUES('theme',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(id);
+    res.json({ default: id });
+  });
 
   // Inventory: barcode scan adds stock; image recognition suggests a category.
   app.get('/api/barcode/:code', (req, res) => {
