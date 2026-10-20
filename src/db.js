@@ -4,14 +4,16 @@ export function openDb(file = process.env.DB_FILE || 'mydesign.db') {
   const db = new DatabaseSync(file);
   db.exec(`
     CREATE TABLE IF NOT EXISTS products(id INTEGER PRIMARY KEY, name TEXT, price INTEGER, barcode TEXT UNIQUE, category TEXT, image TEXT, stock INTEGER DEFAULT 0);
-    CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, email TEXT, address TEXT, city TEXT, total INTEGER, method TEXT, status TEXT, tracking TEXT, courier TEXT);
+    CREATE TABLE IF NOT EXISTS orders(id INTEGER PRIMARY KEY, email TEXT, address TEXT, city TEXT, total INTEGER, method TEXT, status TEXT, tracking TEXT, courier TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE IF NOT EXISTS wishlist(client TEXT, product_id INTEGER, PRIMARY KEY(client, product_id));
     CREATE TABLE IF NOT EXISTS emails(id INTEGER PRIMARY KEY, to_addr TEXT, subject TEXT, body TEXT);
     CREATE TABLE IF NOT EXISTS banners(id INTEGER PRIMARY KEY, text TEXT, active INTEGER DEFAULT 1);
     CREATE TABLE IF NOT EXISTS payment_config(method TEXT PRIMARY KEY, merchant_id TEXT DEFAULT '', account_title TEXT DEFAULT '', mode TEXT DEFAULT 'manual');
+    CREATE TABLE IF NOT EXISTS order_items(order_id INTEGER, product_id INTEGER, qty INTEGER);
     CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
     CREATE TABLE IF NOT EXISTS social_posts(id INTEGER PRIMARY KEY, platform TEXT, text TEXT);
   `);
+  try { db.exec('ALTER TABLE orders ADD COLUMN created_at TEXT'); } catch {} // upgrade older DB files
   for (const m of ['easypaisa', 'jazzcash']) db.prepare('INSERT OR IGNORE INTO payment_config(method) VALUES(?)').run(m);
   if (db.prepare('SELECT COUNT(*) c FROM products').get().c === 0) {
     const ins = db.prepare('INSERT INTO products(name,price,barcode,category,image,stock) VALUES(?,?,?,?,?,?)');

@@ -8,6 +8,22 @@ import { recognize } from './services/vision.js';
 import { autoPost } from './services/social.js';
 import { themes, DEFAULT_THEME } from './themes.js';
 
+// Cancels an unpaid order and returns its items to stock. Returns false if not cancellable.
+export function cancelUnpaidOrder(db, id, reason = 'cancelled') {
+  const o = db.prepare('SELECT status FROM orders WHERE id=?').get(id);
+  if (!o || o.status !== 'awaiting_payment') return false;
+  for (const it of db.prepare('SELECT * FROM order_items WHERE order_id=?').all(id))
+    db.prepare('UPDATE products SET stock=stock+? WHERE id=?').run(it.qty, it.product_id);
+  db.prepare('UPDATE orders SET status=? WHERE id=?').run(reason, id);
+  return true;
+}
+
+// Expires unpaid orders older than `hours`. Returns the ids expired.
+export function expireUnpaidOrders(db, hours = Number(process.env.PAYMENT_HOLD_HOURS) || 48) {
+  const rows = db.prepare("SELECT id FROM orders WHERE status='awaiting_payment' AND created_at IS NOT NULL AND datetime(created_at) <= datetime('now', ?)").all(`-${hours} hours`);
+  return rows.map(r => r.id).filter(id => cancelUnpaidOrder(db, id, 'expired'));
+}
+
 export function requireAdmin(req, res, next) {
   const token = process.env.ADMIN_TOKEN;
   if (!token) return res.status(503).json({ error: 'ADMIN_TOKEN not configured' });
@@ -78,6 +94,15 @@ export function createApp(db = openDb()) {
     res.json({ id: o.id, status: 'confirmed', shipment: ship });
   });
 
+  app.post('/api/orders/:id/cancel', requireAdmin, async (req, res) => {
+    const id = Number(req.params.id);
+    const o = db.prepare('SELECT * FROM orders WHERE id=?').get(id);
+    if (!o) return res.status(404).json({ error: 'Order not found' });
+    if (!cancelUnpaidOrder(db, id)) return res.status(409).json({ error: 'Only orders awaiting payment can be cancelled' });
+    await sendMail(db, o.email, `Order #${id} cancelled`, 'Your order was cancelled because payment was not received.');
+    res.json({ id, status: 'cancelled' });
+  });
+
   // Wishlist
   app.get('/api/wishlist/:client', (req, res) => res.json(db.prepare('SELECT p.* FROM wishlist w JOIN products p ON p.id=w.product_id WHERE w.client=?').all(req.params.client)));
   app.post('/api/wishlist/:client/:pid', (req, res) => { db.prepare('INSERT OR IGNORE INTO wishlist VALUES(?,?)').run(req.params.client, Number(req.params.pid)); res.sendStatus(204); });
@@ -100,7 +125,10 @@ export function createApp(db = openDb()) {
       const manual = conf && conf.mode === 'manual';
       const o = db.prepare('INSERT INTO orders(email,address,city,total,method,status,courier) VALUES(?,?,?,?,?,?,?)').run(email, address, city, total, method, 'pending', courier || null);
       const id = Number(o.lastInsertRowid);
-      for (const it of items) db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(it.qty, it.id);
+      for (const it of items) {
+        db.prepare('UPDATE products SET stock=stock-? WHERE id=?').run(it.qty, it.id);
+        db.prepare('INSERT INTO order_items VALUES(?,?,?)').run(id, it.id, it.qty);
+      }
       if (manual) {
         db.prepare('UPDATE orders SET status=? WHERE id=?').run('awaiting_payment', id);
         const instructions = `Please send Rs ${total} to ${method} account ${conf.merchant_id || '(not set)'}${conf.account_title ? ` (${conf.account_title})` : ''} and quote order #${id}. We ship once payment is confirmed.`;
@@ -125,5 +153,7 @@ export function createApp(db = openDb()) {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  createApp().listen(process.env.PORT || 3000, () => console.log('My Design running'));
+  const db = openDb();
+  setInterval(() => expireUnpaidOrders(db), 60 * 60 * 1000).unref();
+  createApp(db).listen(process.env.PORT || 3000, () => console.log('My Design running'));
 }

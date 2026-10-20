@@ -17,3 +17,6 @@ Themes: `GET /api/themes` lists the 10 themes and the store default; `PUT /api/t
 Payments: each wallet has a merchant ID, account title and mode, set with `PUT /api/payments/config/:method` (admin; `easypaisa` or `jazzcash`). `GET /api/payments/methods` lists them publicly.
 - `manual` (default): the order is held as `awaiting_payment` and the customer gets instructions to send money to your account. An admin calls `POST /api/orders/:id/confirm-payment` to book the courier and email tracking.
 - `api`: the gateway adapter charges immediately (sandbox until real API calls are written).
+
+Unpaid orders: `POST /api/orders/:id/cancel` (admin) cancels an `awaiting_payment` order, returns its items to stock and emails the customer. The server also expires unpaid orders hourly after `PAYMENT_HOLD_HOURS` (default 48), restoring stock.
+Orders created before this feature have no stored items, so cancelling them does not restore stock.
