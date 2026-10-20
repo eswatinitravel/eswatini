@@ -50,7 +50,20 @@ $('checkout').onsubmit = async e => {
   const items = Object.entries(cart).map(([id,qty]) => ({ id: +id, qty }));
   const r = await fetch('/api/orders', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({ ...f, items }) });
   const j = await r.json();
-  $('msg').textContent = r.ok ? `Order #${j.id} placed. Tracking ${j.shipment.tracking}` : j.error;
+  $('msg').textContent = !r.ok ? j.error
+    : j.status === 'awaiting_payment' ? `Order #${j.id} received. ${j.instructions}`
+    : `Order #${j.id} placed. Tracking ${j.shipment.tracking}`;
   if (r.ok) cart = {}; load();
 };
 load();
+
+// Show where to send money when a manual-payment wallet is selected.
+let methods = [];
+const showPayInfo = () => {
+  const m = methods.find(x => x.method === document.querySelector('[name=method]').value);
+  $('payinfo').textContent = m && m.mode === 'manual'
+    ? `Send payment to ${m.method} account ${m.account || '(not set yet)'}${m.account_title ? ` (${m.account_title})` : ''}. We ship once it is confirmed.`
+    : '';
+};
+document.querySelector('[name=method]').onchange = showPayInfo;
+fetch('/api/payments/methods').then(r => r.json()).then(m => { methods = m; showPayInfo(); });
