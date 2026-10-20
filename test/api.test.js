@@ -3,12 +3,13 @@ import assert from 'node:assert';
 import { createApp } from '../src/server.js';
 import { openDb } from '../src/db.js';
 
+process.env.ADMIN_TOKEN = 'secret';
 test('catalog, wishlist, scan, checkout', async () => {
   const db = openDb(':memory:');
   const srv = createApp(db).listen(0);
   const base = `http://localhost:${srv.address().port}`;
   const j = (u, o) => fetch(base + u, o).then(async r => ({ s: r.status, b: r.status === 204 ? null : await r.json() }));
-  const post = (u, b) => j(u, { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify(b) });
+  const post = (u, b, auth = true) => j(u, { method: 'POST', headers: { 'content-type': 'application/json', ...(auth && { authorization: 'Bearer secret' }) }, body: JSON.stringify(b) });
   try {
     const prods = (await j('/api/products')).b;
     assert.ok(prods.length >= 8);
@@ -16,6 +17,7 @@ test('catalog, wishlist, scan, checkout', async () => {
     assert.equal((await j('/api/wishlist/c1')).b.length, 1);
     assert.equal((await post('/api/inventory/scan', { barcode: prods[0].barcode, qty: 5 })).b.stock, 15);
     assert.equal((await post('/api/inventory/recognize', { hint: 'blue vase' })).b.category, 'decor');
+    assert.equal((await post('/api/inventory/scan', { barcode: 'x' }, false)).s, 401);
     const o = await post('/api/orders', { email: 'a@b.pk', address: 'x', city: 'Lahore', method: 'easypaisa', courier: 'leopards', items: [{ id: 1, qty: 2 }] });
     assert.equal(o.s, 201);
     assert.equal(o.b.total, 9000);

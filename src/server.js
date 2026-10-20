@@ -7,6 +7,13 @@ import { sendMail } from './services/mailer.js';
 import { recognize } from './services/vision.js';
 import { autoPost } from './services/social.js';
 
+export function requireAdmin(req, res, next) {
+  const token = process.env.ADMIN_TOKEN;
+  if (!token) return res.status(503).json({ error: 'ADMIN_TOKEN not configured' });
+  if (req.get('authorization') !== `Bearer ${token}`) return res.status(401).json({ error: 'Unauthorized' });
+  next();
+}
+
 export function createApp(db = openDb()) {
   const app = express();
   app.use(express.json());
@@ -21,14 +28,14 @@ export function createApp(db = openDb()) {
     const p = db.prepare('SELECT * FROM products WHERE barcode=?').get(req.params.code);
     p ? res.json(p) : res.status(404).json({ error: 'Not found' });
   });
-  app.post('/api/inventory/scan', (req, res) => {
+  app.post('/api/inventory/scan', requireAdmin, (req, res) => {
     const { barcode, qty = 1 } = req.body;
     const r = db.prepare('UPDATE products SET stock=stock+? WHERE barcode=?').run(qty, barcode);
     if (!r.changes) return res.status(404).json({ error: 'Unknown barcode' });
     res.json(db.prepare('SELECT * FROM products WHERE barcode=?').get(barcode));
   });
-  app.post('/api/inventory/recognize', (req, res) => res.json(recognize(req.body.hint)));
-  app.post('/api/products', (req, res) => {
+  app.post('/api/inventory/recognize', requireAdmin, (req, res) => res.json(recognize(req.body.hint)));
+  app.post('/api/products', requireAdmin, (req, res) => {
     const { name, price, barcode, category, stock = 0 } = req.body;
     const r = db.prepare('INSERT INTO products(name,price,barcode,category,image,stock) VALUES(?,?,?,?,?,?)').run(name, price, barcode, category || recognize(name).category, '', stock);
     const p = db.prepare('SELECT * FROM products WHERE id=?').get(r.lastInsertRowid);
